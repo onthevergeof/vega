@@ -1593,7 +1593,9 @@ const Player = ({route}: Props): React.JSX.Element => {
       Boolean((route.params as any)?.alwaysCast) ||
       settingsStorage.isAlwaysCastMode());
   const isCasting =
-    !Platform.isTV && (Boolean(remoteMediaClient) || isRemoteActive);
+    !Platform.isTV &&
+    !isIframeStream &&
+    (Boolean(remoteMediaClient) || isRemoteActive);
   const isRemoteActiveRef = useRef(isRemoteActive);
   isRemoteActiveRef.current = isRemoteActive;
 
