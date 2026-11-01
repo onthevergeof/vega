@@ -1,0 +1,68 @@
+name: FrameXTV embedded-player debug APK
+
+on:
+  pull_request:
+    paths:
+      - "src/screens/home/Player.tsx"
+      - "src/components/media-console/EmbeddedStreamPlayer.tsx"
+      - ".github/workflows/framextv-player-apk.yml"
+      - "app.config.js"
+      - "package.json"
+      - "package-lock.json"
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: "1"
+      APP_VARIANT: standalone
+      EXPO_NO_TELEMETRY: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Android project
+        run: npm run build:sandbox && npx expo prebuild --platform android --clean --no-install
+
+      - name: Install Android CMake
+        run: sdkmanager --install 'cmake;3.22.1'
+
+      - name: Build debug APK
+        run: |
+          set -euo pipefail
+          chmod +x android/gradlew
+          cd android
+          ./gradlew :app:assembleDebug --build-cache --no-daemon --max-workers=2 --no-parallel --console=plain
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vega-FrameXTV-iframe-debug-APK
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
