@@ -1,4 +1,4 @@
-name: FrameXTV embedded-player debug APK
+name: FrameXTV embedded-player signed APK
 
 on:
   pull_request:
@@ -14,9 +14,10 @@ permissions:
   contents: read
 
 jobs:
-  build-debug-apk:
+  build-signed-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
+    environment: nightly
     env:
       CI: "1"
       APP_VARIANT: standalone
@@ -52,17 +53,48 @@ jobs:
       - name: Install Android CMake
         run: sdkmanager --install 'cmake;3.22.1'
 
-      - name: Build debug APK
+      - name: Load nightly signing credentials
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?Missing nightly KEYSTORE_BASE64 secret}"
+          : "${KEYSTORE_PASSWORD:?Missing nightly KEYSTORE_PASSWORD secret}"
+          : "${KEY_ALIAS:?Missing nightly KEY_ALIAS secret}"
+          : "${KEY_PASSWORD:?Missing nightly KEY_PASSWORD secret}"
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/android/app/release.keystore"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        shell: bash
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x android/gradlew
           cd android
-          ./gradlew :app:assembleDebug --build-cache --no-daemon --max-workers=2 --no-parallel --console=plain
+          ./gradlew :app:assembleRelease --build-cache --no-daemon --max-workers=1 --no-parallel --console=plain --stacktrace \
+            "-Pandroid.injected.signing.store.file=$KEYSTORE_PATH" \
+            "-Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD" \
+            "-Pandroid.injected.signing.key.alias=$KEY_ALIAS" \
+            "-Pandroid.injected.signing.key.password=$KEY_PASSWORD"
 
-      - name: Upload debug APK
+      - name: Upload signed APKs
         uses: actions/upload-artifact@v4
         with:
-          name: Vega-FrameXTV-iframe-debug-APK
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: Vega-FrameXTV-iframe-signed-APK
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Remove signing file
+        if: always()
+        run: rm -f -- android/app/release.keystore
