@@ -54,6 +54,7 @@ import Orientation, {
 } from 'react-native-orientation-locker';
 import {SystemBars} from 'react-native-edge-to-edge';
 import VideoPlayer from '../../components/media-console';
+import EmbeddedStreamPlayer from '../../components/media-console/EmbeddedStreamPlayer';
 import {playPauseRef} from '../../components/media-console/components/PlayPause/PlayPause';
 import {Back} from '../../components/media-console/components/Back';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
@@ -1568,11 +1569,13 @@ const Player = ({route}: Props): React.JSX.Element => {
   // progress updates never reload it. Starting there skips buffering the opening
   // seconds, which on a torrent means downloading pieces that are then skipped.
   const [torrentStartMs, setTorrentStartMs] = useState<number | undefined>();
+  const isIframeStream = selectedStream?.type === 'iframe';
   const canCastStream = useMemo(
     () =>
+      !isIframeStream &&
       !Platform.isTV &&
       isCastableStreamUrl(processedStreamUrl, selectedStream?.type),
-    [processedStreamUrl, selectedStream?.type],
+    [isIframeStream, processedStreamUrl, selectedStream?.type],
   );
   const isLocalOrDownloadedStream = useMemo(
     () =>
@@ -1583,13 +1586,16 @@ const Player = ({route}: Props): React.JSX.Element => {
   );
   const isRemoteActive =
     !Platform.isTV &&
+    !isIframeStream &&
     (Boolean(remoteMediaClient) ||
       Boolean(connectedRemoteDevice) ||
       castRequested ||
       Boolean((route.params as any)?.alwaysCast) ||
       settingsStorage.isAlwaysCastMode());
   const isCasting =
-    !Platform.isTV && (Boolean(remoteMediaClient) || isRemoteActive);
+    !Platform.isTV &&
+    !isIframeStream &&
+    (Boolean(remoteMediaClient) || isRemoteActive);
   const isRemoteActiveRef = useRef(isRemoteActive);
   isRemoteActiveRef.current = isRemoteActive;
 
@@ -3602,6 +3608,31 @@ const Player = ({route}: Props): React.JSX.Element => {
             Go Back
           </Text>
         </TVFocusable>
+      </SafeAreaView>
+    );
+  }
+
+  if (isIframeStream && selectedStream?.link) {
+    return (
+      <SafeAreaView
+        edges={{right: 'off', top: 'off', left: 'off', bottom: 'off'}}
+        className="bg-black flex-1">
+        <SystemBars hidden={true} />
+        <StatusBar translucent={true} hidden={true} />
+        <OrientationLocker orientation={LANDSCAPE} />
+        <EmbeddedStreamPlayer
+          uri={selectedStream.link}
+          title={
+            activeEpisode?.title ||
+            route.params?.secondaryTitle ||
+            route.params?.primaryTitle ||
+            'Embedded stream'
+          }
+          onBack={() => {
+            exitFullScreen();
+            navigation.goBack();
+          }}
+        />
       </SafeAreaView>
     );
   }
